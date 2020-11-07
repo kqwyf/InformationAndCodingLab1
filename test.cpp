@@ -4,7 +4,7 @@
 
 #include "lz77.h"
 
-const int NUM_TESTS = 1000;
+const int NUM_TESTS = 10000;
 
 const int MAX_INPUT_LENGTH = 1000; // 随机产生的输入的最长长度
 const int MAX_OUTPUT_LENGTH = 2000; // 压缩输出缓冲区长度
