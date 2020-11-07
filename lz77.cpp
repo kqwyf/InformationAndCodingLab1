@@ -26,7 +26,7 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
 
     // 初始阶段，search buffer未被输入填满。
     // 此时始终不匹配（匹配长度为0），先使用searchBufLen个三元组将search buffer内的符号全部输出
-    for (int i = 0; i < searchBufLen; i++) {
+    for (int i = 0; i < std::min(searchBufLen, srcLen); i++) {
         if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
 
         dst[len].offset = 0; // 无用参数
@@ -36,7 +36,7 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
     }
 
     // 压缩阶段，search buffer已被输入填满
-    int pos = searchBufLen; // look ahead buffer最左符号在src中的下标，表示buffer的位置，随着循环更新。
+    int pos = std::min(searchBufLen, srcLen); // look ahead buffer最左符号在src中的下标，表示buffer的位置，随着循环更新。
     while (pos < srcLen) {
         if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
 
