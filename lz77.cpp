@@ -28,6 +28,7 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
     // 此时始终不匹配（匹配长度为0），先使用searchBufLen个三元组将search buffer内的符号全部输出
     for (int i = 0; i < searchBufLen; i++) {
         if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
+
         dst[len].offset = 0; // 无用参数
         dst[len].length = 0; // 未匹配任何符号
         dst[len].symbol = src[i]; // 当前符号
@@ -35,8 +36,10 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
     }
 
     // 压缩阶段，search buffer已被输入填满
-    int pos = searchBufLen; // look ahead buffer最左符号在src中的下标，随着循环更新。
-    while (pos < srcLen && len < dstMaxLen) {
+    int pos = searchBufLen; // look ahead buffer最左符号在src中的下标，表示buffer的位置，随着循环更新。
+    while (pos < srcLen) {
+        if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
+
         // 找出最长匹配
         int bestOffset = -1; // 已找到的最长匹配的偏移量
         int bestMatchLen = -1; // 已找到的最长匹配的长度
@@ -52,7 +55,7 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
                 bestMatchLen = matchLen;
             }
         }
-        if (bestMatchLen == 0) // search buffer中没有可匹配的串
+        if (bestMatchLen == 0) // search buffer中没有可匹配的串。
             bestOffset = 0;
 
         // 编码三元组并移动buffer
@@ -63,10 +66,39 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
             dst[len].symbol = src[pos + bestMatchLen];
             pos += bestMatchLen + 1;
         } else {
-            dst[len].symbol = 0;
+            dst[len].symbol = -1; // TODO: 这里并不合理，不应该使用symbol字段的特殊值来表示此处没有符号。应考虑使用offset和length字段的特殊值来表示。
             pos += bestMatchLen;
         }
         len++;
+    }
+
+    return len;
+}
+
+int decompressLz77(const Lz77OutputUnit *src, int srcLen, char *dst, int dstMaxLen, int searchBufLen, int lookAheadBufLen) {
+    int pos = 0; // look ahead buffer最左符号在dst中的下标，表示buffer的位置，随着循环更新。
+    int len = 0; // 已输出的长度
+    for (int i = 0; i < srcLen; i++) {
+        if (src[i].offset == 0 || src[i].length == 0) { // 没有匹配串，直接输出未匹配字符
+            if (len >= dstMaxLen) return -1; // 检查缓冲区是否已满
+            dst[len++] = src[i].symbol;
+            pos++;
+        } else { // 有匹配串
+            // 先输出匹配串
+            int offset = src[i].offset;
+            for (int j = 0; j < src[i].length; j++) {
+                if (len >= dstMaxLen) return -1; // 输出每个符号前检查缓冲区是否已满
+                dst[len++] = dst[pos - offset + j];
+            }
+            pos += src[i].length;
+
+            // 然后检查匹配串之后是否有未匹配字符，有则输出
+            if (src[i].symbol != -1) { // TODO: 不应该使用symbol字段的特殊值表示没有符号。见压缩算法中的TODO。
+                if (len >= dstMaxLen) return -1; // 检查缓冲区是否已满
+                dst[len++] = src[i].symbol;
+                pos++;
+            }
+        }
     }
 
     return len;
