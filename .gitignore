@@ -1,1 +1,7 @@
 build
+bin
+obj
+.vscode
+*.cbp
+*.depend
+*.layout
