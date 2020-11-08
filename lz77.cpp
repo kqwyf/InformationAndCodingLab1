@@ -1,5 +1,9 @@
+#include <cstdint>
 #include <cstring>
 #include <algorithm>
+#include <pthread.h>
+#include <vector>
+#include <cstdio>
 
 #include "lz77.h"
 
@@ -99,6 +103,118 @@ int decompressLz77(const Lz77OutputUnit *src, int srcLen, char *dst, int dstMaxL
                 pos++;
             }
         }
+    }
+
+    return len;
+}
+
+/*
+ * 由于Pthread仅支持传递一个参数，因此将所有参数打包为一个结构体，
+ * 并将compressLz77和decompressLz77打包成_compressLz77和_decompressLz77
+ */
+
+struct CompressLz77Args {
+    const char *src;
+    int srcLen;
+    Lz77OutputUnit *dst;
+    int dstMaxLen;
+    int searchBufLen;
+    int lookAheadBufLen;
+};
+
+struct DecompressLz77Args {
+    const Lz77OutputUnit *src;
+    int srcLen;
+    char *dst;
+    int dstMaxLen;
+    int searchBufLen;
+    int lookAheadBufLen;
+};
+
+void *_compressLz77(void *args) {
+    CompressLz77Args *xargs = (CompressLz77Args*) args;
+    intptr_t len = compressLz77(xargs->src, xargs->srcLen, xargs->dst, xargs->dstMaxLen, xargs->searchBufLen, xargs->lookAheadBufLen);
+    return (void*)len;
+}
+
+int parallel_compressLz77(int num_t, const char *src, int srcLen, Lz77ParallelResult *dst, int dstMaxLen, int searchBufLen, int lookAheadBufLen) {
+    // 分发参数
+    CompressLz77Args args[num_t];
+    int block_len = (srcLen + num_t - 1) / num_t;
+    int blockMaxLen = (dstMaxLen + num_t - 1) / num_t;
+
+    for (int i = 0; i < num_t; ++i) {
+        args[i].src = src + block_len * i;  // 加上偏移
+        args[i].srcLen = std::min(srcLen - (block_len * i), block_len); // 长度
+        args[i].dst = new Lz77OutputUnit[blockMaxLen];  // 手动分配
+        args[i].dstMaxLen = blockMaxLen;
+        args[i].searchBufLen = searchBufLen;
+        args[i].lookAheadBufLen = lookAheadBufLen;
+        dst->blocks.push_back(args[i].dst);  // 压缩结果会写入参数中的dst地址中，因此回收地址也是这个
+    }
+
+    // 创建子线程
+    pthread_t threads[num_t];
+
+    for (int i = 0; i < num_t; ++i) {
+        int res_code = pthread_create(&threads[i], NULL, _compressLz77, (void*)&args[i]);
+        if (res_code) return -1;
+    }
+
+    // 回收结果
+    int len = 0;    // 统计每个子线程压缩结果各自长度之和
+
+    for (int i = 0; i < num_t; ++i) {
+        void *retval;
+        if (pthread_join(threads[i], &retval))
+            return -1;
+        int _len = (intptr_t) retval;
+        len += _len;
+        dst->lens.push_back(_len);   // 每个子线程的返回值为压缩后的三元组个数
+    }
+
+    return len;
+}
+
+void *_decompressLz77(void *args) {
+    DecompressLz77Args *xargs = (DecompressLz77Args*) args;
+    intptr_t len = decompressLz77(xargs->src, xargs->srcLen, xargs->dst, xargs->dstMaxLen, xargs->searchBufLen, xargs->lookAheadBufLen);
+    return (void*)len;
+}
+
+int parallel_decompressLz77(const Lz77ParallelResult *src, char *dst, int dstMaxLen, int searchBufLen, int lookAheadBufLen) {
+    // 分发参数
+    int num_t = src->lens.size();
+    DecompressLz77Args args[num_t];
+    int blockMaxLen = (dstMaxLen + num_t - 1) / num_t;
+
+    for (int i = 0; i < num_t; ++i) {
+        args[i].src = src->blocks[i];
+        args[i].srcLen = src->lens[i];
+        args[i].dst = new char[blockMaxLen];
+        args[i].dstMaxLen = blockMaxLen;
+        args[i].searchBufLen = searchBufLen;
+        args[i].lookAheadBufLen = lookAheadBufLen;
+    }
+
+    // 创建子线程
+    pthread_t threads[num_t];
+
+    for (int i = 0; i < num_t; ++i) {
+        int res_code = pthread_create(&threads[i], NULL, _decompressLz77, (void*)&args[i]);
+        if (res_code) return -1;
+    }
+
+    // 回收结果
+    int len = 0;    // 统计每个子线程解压缩结果各自长度之和
+
+    for (int i = 0; i < num_t; ++i) {
+        void *retval;
+        if (pthread_join(threads[i], &retval)) return -1;
+        int _len = (intptr_t) retval;
+        // 将结果写到dst中
+        for (int j = 0; j < _len; ++j) dst[len++] = args[i].dst[j];
+        delete args[i].dst;
     }
 
     return len;

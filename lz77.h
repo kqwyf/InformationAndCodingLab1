@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 struct Lz77OutputUnit {
     int offset; // 相对于buffer边界的偏移量
@@ -36,3 +37,20 @@ int compressLz77(const char *src, int srcLen, Lz77OutputUnit *dst, int dstMaxLen
  */
 int decompressLz77(const Lz77OutputUnit *src, int srcLen, char *dst, int dstMaxLen, int searchBufLen, int lookAheadBufLen);
 
+/*
+ * 并行压缩返回结果
+ */
+struct Lz77ParallelResult {
+    std::vector<int> lens;
+    std::vector<Lz77OutputUnit*> blocks;
+};
+
+/**
+ * 并行压缩，除了增加表示并行度的num_t参数外，其他参数与compressLz77相同。
+ */
+int parallel_compressLz77(int num_t, const char *src, int srcLen, Lz77ParallelResult *dst, int dstMaxLen, int searchBufLen, int lookAheadBufLen);
+
+/**
+ * 并行解压，除了增加表示并行度的num_t参数外，其他参数与decompressLz77相同。
+ */
+int parallel_decompressLz77(const Lz77ParallelResult *src, char *dst, int dstMaxLen, int searchBufLen, int lookAheadBufLen);
