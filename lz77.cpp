@@ -114,9 +114,9 @@ int decompressLz77(const Lz77OutputUnit *src, int srcLen, char *dst, int dstMaxL
  */
 
 struct CompressLz77Args {
-    const char *src;
+    const char *src = NULL;
     int srcLen;
-    Lz77OutputUnit *dst;
+    Lz77OutputUnit *dst = NULL;
     int dstMaxLen;
     int searchBufLen;
     int lookAheadBufLen;
@@ -142,6 +142,14 @@ int parallel_compressLz77(int num_t, const char *src, int srcLen, Lz77ParallelRe
     CompressLz77Args args[num_t];
     int block_len = (srcLen + num_t - 1) / num_t;
     int blockMaxLen = (dstMaxLen + num_t - 1) / num_t;
+
+    if (dst->lens.size()) {
+        dst->lens.clear();
+        for (int i = 0; i < dst->blocks.size(); ++i) {
+            delete [] dst->blocks[i];
+        }
+        dst->blocks.clear();
+    }
 
     for (int i = 0; i < num_t; ++i) {
         args[i].src = src + block_len * i;  // 加上偏移
@@ -214,7 +222,7 @@ int parallel_decompressLz77(const Lz77ParallelResult *src, char *dst, int dstMax
         int _len = (intptr_t) retval;
         // 将结果写到dst中
         for (int j = 0; j < _len; ++j) dst[len++] = args[i].dst[j];
-        delete args[i].dst;
+        delete []args[i].dst;
     }
 
     return len;
