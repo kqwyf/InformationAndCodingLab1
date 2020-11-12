@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
     }
     end_time = clock();
 
-    printf("Baseline: %lld ms\n", (end_time - start_time) * 1000 / CLOCKS_PER_SEC);
+    printf("Baseline: %lld ms\n", (end_time - start_time) * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
 
     srand(seed);
     start_time = clock();
@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
     }
     end_time = clock();
 
-    printf("Multi-core: %lld ms\n", (end_time - start_time) * 1000 / CLOCKS_PER_SEC);
+    printf("Multi-core: %lld ms\n", (end_time - start_time) * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
 
     // 回收跑路
     delete []src;
