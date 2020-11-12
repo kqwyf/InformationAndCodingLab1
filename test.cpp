@@ -9,8 +9,8 @@
 int NUM_TESTS = 10;
 
 int MAX_INPUT_LENGTH = 800000;            // 随机产生的输入的最长长度
-int MAX_OUTPUT_LENGTH = MAX_INPUT_LENGTH; // 压缩输出缓冲区长度
-int MAX_DECODE_LENGTH = MAX_INPUT_LENGTH; // 解压输出缓冲区长度
+int MAX_OUTPUT_LENGTH = int(MAX_INPUT_LENGTH * 1.2); // 压缩输出缓冲区长度
+int MAX_DECODE_LENGTH = int(MAX_INPUT_LENGTH * 1.2); // 解压输出缓冲区长度
 
 int MAX_SEARCH_LENGTH = 500;
 int MAX_LOOKAHEAD_LENGTH = 500;
@@ -45,7 +45,10 @@ void parse_arg(int argc, char *argv[]) {
     for (int i = 1; i < argc; ++i) {
         char *arg = argv[i];
         if (smatch(arg, "-n") || smatch(arg, "--iter")) NUM_TESTS = std::stoi(argv[++i]);
-        else if (smatch(arg, "--input")) MAX_OUTPUT_LENGTH = MAX_DECODE_LENGTH = MAX_INPUT_LENGTH = NEXT_INT_ARG;
+        else if (smatch(arg, "--input")) {
+            MAX_INPUT_LENGTH = NEXT_INT_ARG;
+            MAX_DECODE_LENGTH = MAX_OUTPUT_LENGTH = int(1.2 * MAX_INPUT_LENGTH);
+        }
         else if (smatch(arg, "--search")) MAX_SEARCH_LENGTH = NEXT_INT_ARG;
         else if (smatch(arg, "--look")) MAX_LOOKAHEAD_LENGTH = NEXT_INT_ARG;
         else if (smatch(arg, "-t") || smatch(arg, "--thread")) N_THREAD = NEXT_INT_ARG;
@@ -56,8 +59,8 @@ void parse_arg(int argc, char *argv[]) {
 }
 
 int rrand(int _max, int range) {
-    int tmp = (rand() >> 3) * (rand() >> 2);
-    return _max - tmp % range ;
+    int tmp = rand() & 0xffff;
+    return _max - tmp * tmp % range;
 }
 
 int main(int argc, char* argv[]) {
@@ -66,6 +69,9 @@ int main(int argc, char* argv[]) {
     time_t start_time, end_time;
 
     // 分配空间
+    printf("max input len: %d\n", MAX_INPUT_LENGTH);
+    printf("max decode len: %d\n", MAX_DECODE_LENGTH);
+    printf("max output len: %d\n", MAX_OUTPUT_LENGTH);
     char *src = new char[MAX_INPUT_LENGTH];
     char *out = new char[MAX_DECODE_LENGTH];
     Lz77OutputUnit *dst1 = new Lz77OutputUnit[MAX_OUTPUT_LENGTH];
