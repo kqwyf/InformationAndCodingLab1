@@ -5,15 +5,17 @@
 #include <string>
 
 #include "lz77.h"
+#include "lz78.h"
+
+using namespace std;
 
 int NUM_TESTS = 10;
 
 int MAX_INPUT_LENGTH = 800000;            // 随机产生的输入的最长长度
-int MAX_OUTPUT_LENGTH = int(MAX_INPUT_LENGTH * 1.2); // 压缩输出缓冲区长度
-int MAX_DECODE_LENGTH = int(MAX_INPUT_LENGTH * 1.2); // 解压输出缓冲区长度
 
 int MAX_SEARCH_LENGTH = 500;
 int MAX_LOOKAHEAD_LENGTH = 500;
+int MAX_DICT_SIZE = 500;  // TODO: dictSize怎么确定？
 
 int N_THREAD = 2;
 time_t seed = 0;
@@ -36,7 +38,7 @@ void unknown_arg_err() {
 }
 
 #define smatch(a,b)     !strcmp(a,b)
-#define NEXT_INT_ARG    std::atoi(argv[++i])
+#define NEXT_INT_ARG    atoi(argv[++i])
 
 /*
  * 解析命令行参数。
@@ -44,11 +46,8 @@ void unknown_arg_err() {
 void parse_arg(int argc, char *argv[]) {
     for (int i = 1; i < argc; ++i) {
         char *arg = argv[i];
-        if (smatch(arg, "-n") || smatch(arg, "--iter")) NUM_TESTS = std::stoi(argv[++i]);
-        else if (smatch(arg, "--input")) {
-            MAX_INPUT_LENGTH = NEXT_INT_ARG;
-            MAX_DECODE_LENGTH = MAX_OUTPUT_LENGTH = int(1.2 * MAX_INPUT_LENGTH);
-        }
+        if (smatch(arg, "-n") || smatch(arg, "--iter")) NUM_TESTS = stoi(argv[++i]);
+        else if (smatch(arg, "--input")) MAX_INPUT_LENGTH = NEXT_INT_ARG;
         else if (smatch(arg, "--search")) MAX_SEARCH_LENGTH = NEXT_INT_ARG;
         else if (smatch(arg, "--look")) MAX_LOOKAHEAD_LENGTH = NEXT_INT_ARG;
         else if (smatch(arg, "-t") || smatch(arg, "--thread")) N_THREAD = NEXT_INT_ARG;
@@ -63,103 +62,100 @@ int rrand(int _max, int range) {
     return _max - tmp * tmp % range;
 }
 
+bool test_lz77(const vector<char> &src, int searchBufLen, int lookAheadBufLen, time_t &time_cost) {   // TODO: 改完lz77后将这个函数补全
+    // 分配空间
+    // vector<xxx>;
+
+    time_t start = clock();
+    // int retval = compressLz77(src, );
+    // retval = decompressLz77();
+    time_cost += clock() - start;
+
+    bool error = false;
+    // if (src.size() != retval) error = false;
+    // else {
+    //     for (int i = 0; i < retval; ++i) {
+    //         if (src[i] != out[i]) {
+    //             error = true;
+    //             break;
+    //         }
+    //     }
+    // }
+
+    if (error) {
+        // Do something
+        return false;
+    }
+
+    return true;
+}
+
+bool test_lz77_parallel(const vector<char> &src, time_t &time_cost) {
+    return true;
+}
+
+bool test_lz78(const vector<char> &src, int dictSize, time_t &time_cost) {
+    // 分配空间
+    vector<Lz78OutputUnit> dst78;
+    vector<char> out;
+
+    time_t start = clock();
+    int retval = compressLz78(src, dst78, dictSize);
+    retval = decompressLz78(dst78, out, dictSize);
+    time_cost += clock() - start;
+
+    // 检查
+    bool flag = false;
+    if (src.size() != retval) flag = true;
+    else {
+        for (int i = 0; i < retval; i++) {
+            if (src[i] != out[i]) {
+                flag = true;
+                break;
+            }
+        }
+    }
+
+    if (flag) {
+        // Do something
+        return false;
+    }
+
+    return true;
+}
+
+bool test_lzw(const vector<char> &src, time_t &time_cost) {
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     parse_arg(argc, argv);
 
-    time_t start_time, end_time;
+    time_t time_lz77 = 0, time_lz77_parall = 0, time_lz78 = 0, time_lzw = 0;
 
-    // 分配空间
+    // TODO: 压缩率测试
+
     printf("max input len: %d\n", MAX_INPUT_LENGTH);
-    printf("max decode len: %d\n", MAX_DECODE_LENGTH);
-    printf("max output len: %d\n", MAX_OUTPUT_LENGTH);
-    char *src = new char[MAX_INPUT_LENGTH];
-    char *out = new char[MAX_DECODE_LENGTH];
-    Lz77OutputUnit *dst1 = new Lz77OutputUnit[MAX_OUTPUT_LENGTH];
-    Lz77ParallelResult *dst2 = new Lz77ParallelResult();
 
     srand(seed);
-    start_time = clock();
-    for (int test = 0; test < NUM_TESTS; test++) {
-        int searchBufLen = rrand(MAX_SEARCH_LENGTH, 50);
-        int lookAheadBufLen = rrand(MAX_LOOKAHEAD_LENGTH, 50);
 
-        // 随机生成输入
+    for (int test = 0; test < NUM_TESTS; ++test) {
+        // 分配空间
+        vector<char> src;
+
+        // 随机生成输入配置
         int inputLen = rrand(MAX_INPUT_LENGTH, 10000);
-        for (int i = 0; i < inputLen; i++) src[i] = rand() % 2;
+        for (int i = 0; i < inputLen; i++) src.push_back(rand() % 2);   // TODO: 以byte为单位
+        int dictSize = rrand(MAX_DICT_SIZE, 100);
 
-        // 压缩
-        int retval = compressLz77(src, inputLen, dst1, MAX_OUTPUT_LENGTH, searchBufLen, lookAheadBufLen);
-        // 解压缩
-        retval = decompressLz77(dst1, retval, out, MAX_DECODE_LENGTH, searchBufLen, lookAheadBufLen);
-
-        // 检查
-        bool flag = false;
-        if (inputLen != retval) flag = true;
-        else {
-            for (int i = 0; i < inputLen; i++) {
-                if (src[i] != out[i]) {
-                    flag = true;
-                    break;
-                }
-            }
-        }
-
-        // 若有错误则打印输入并退出
-        if (flag) {
-            printf("Input Length: %d\n", inputLen);
-            printf("Search Buffer Length: %d\n", searchBufLen);
-            printf("Look Ahead Buffer Length: %d\n", lookAheadBufLen);
-            return -1;
-        }
+        // test_lz77();
+        test_lz78(src, dictSize, time_lz78);
     }
-    end_time = clock();
 
-    printf("Baseline: %lld ms\n", (end_time - start_time) * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
-
-    srand(seed);
-    start_time = clock();
-    for (int test = 0; test < NUM_TESTS; test++) {
-        int searchBufLen = rrand(MAX_SEARCH_LENGTH, 50);
-        int lookAheadBufLen = rrand(MAX_LOOKAHEAD_LENGTH, 50);
-
-        // 随机生成输入
-        int inputLen = rrand(MAX_INPUT_LENGTH, 10000);
-        for (int i = 0; i < inputLen; i++) src[i] = rand() % 2;
-
-        // 压缩
-        int retval = parallel_compressLz77(N_THREAD, src, inputLen, dst2, MAX_OUTPUT_LENGTH, searchBufLen, lookAheadBufLen);
-        // 解压缩
-        retval = parallel_decompressLz77(dst2, out, MAX_DECODE_LENGTH, searchBufLen, lookAheadBufLen);
-
-        // 检查
-        bool flag = false;
-        if (inputLen != retval) flag = true;
-        else {
-            for (int i = 0; i < inputLen; i++) {
-                if (src[i] != out[i]) {
-                    flag = true;
-                    break;
-                }
-            }
-        }
-
-        // 若有错误则打印输入并退出
-        if (flag) {
-            printf("Input Length: %d\n", inputLen);
-            printf("Search Buffer Length: %d\n", searchBufLen);
-            printf("Look Ahead Buffer Length: %d\n", lookAheadBufLen);
-            return -1;
-        }
-    }
-    end_time = clock();
-
-    printf("Multi-core: %lld ms\n", (end_time - start_time) * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
-
-    // 回收跑路
-    delete []src;
-    delete []dst1;
-    delete dst2;
-    delete []out;
+    printf("LZ77:       %lld ms\n", time_lz77 * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
+    printf("Multi-core: %lld ms\n", time_lz77_parall * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
+    printf("LZ78:       %lld ms\n", time_lz78 * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
+    printf("LZW:        %lld ms\n", time_lzw * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
 
     return 0;
 }

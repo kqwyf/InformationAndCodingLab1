@@ -16,13 +16,12 @@ struct Node {
     int child[N]; // 各子节点指针，去往第i个子节点的边上符号为i
 };
 
-int compressLz78(const char *src, int srcLen, Lz78OutputUnit *dst, int dstMaxLen, int dictSize) {
+int compressLz78(const vector<char> &src, vector<Lz78OutputUnit> &dst, int dictSize) {
     // 检验输入合法性，既不为0也不为1时返回-2。见函数文档。
+    int srcLen = src.size();
     for (int i = 0; i < srcLen; i++)
         if (src[i] != 0 && src[i] != 1)
             return -2;
-
-    int len = 0;
 
     // 建立字典树
     Node<2> *tree = new Node<2>[dictSize]; // 目前仅实现2-ary输入上的压缩
@@ -33,8 +32,6 @@ int compressLz78(const char *src, int srcLen, Lz78OutputUnit *dst, int dstMaxLen
     // 压缩阶段
     int pos = 0; // 当前下标
     while (pos < srcLen) {
-        if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
-
         // 在字典树中匹配
         int node = root;
         for (; pos < srcLen; pos++) {
@@ -51,23 +48,19 @@ int compressLz78(const char *src, int srcLen, Lz78OutputUnit *dst, int dstMaxLen
             if (treeSize < dictSize)
                 tree[node].child[c] = treeSize++;
             // 输出
-            dst[len].index = node;
-            dst[len].symbol = c;
-            len++;
-            // 移动pos
-            pos++;
+            dst.push_back(Lz78OutputUnit(node, c));
+            pos++;  // 移动pos
         } else { // 因输入结束而退出
             // 输出
-            dst[len].index = node;
-            dst[len].symbol = -1; // 使用特殊值-1表示此处没有输出符号
-            len++;
+            dst.push_back(Lz78OutputUnit(node, (char)(-1)));
         }
     }
 
-    return len;
+    return dst.size();
 }
 
-int decompressLz78(const Lz78OutputUnit *src, int srcLen, char *dst, int dstMaxLen, int dictSize) {
+int decompressLz78(const vector<Lz78OutputUnit> &src, vector<char> &dst, int dictSize) {
+    int srcLen = src.size();
     int len = 0; // 已输出的长度
 
     // 建立字典树
@@ -81,16 +74,14 @@ int decompressLz78(const Lz78OutputUnit *src, int srcLen, char *dst, int dstMaxL
         // 首先将codeword逆序输出，因为已知字典下标时只能通过parent字段逆序遍历整个codeword
         int wordLen = 0; // 记录当前codeword的长度
         for (int node = src[i].index; node != root; node = tree[node].parent) {
-            if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
-            dst[len++] = tree[node].symbol;
+            dst.push_back(tree[node].symbol);
             wordLen++;
         }
         // 然后再将刚刚输出的codeword逆转过来
-        std::reverse(dst + len - wordLen, dst + len);
+        reverse(dst.end() - wordLen, dst.end());
         // 有未匹配字符时，在输出末尾添加未匹配字符
         if (src[i].symbol != -1) {
-            if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
-            dst[len++] = src[i].symbol;
+            dst.push_back(src[i].symbol);
             // 更新字典树，插入新节点
             if (treeSize < dictSize) {
                 int newnode = treeSize++;
@@ -104,5 +95,5 @@ int decompressLz78(const Lz78OutputUnit *src, int srcLen, char *dst, int dstMaxL
         // 无未匹配字符时，输入也应当遍历结束了
     }
 
-    return len;
+    return dst.size();
 }

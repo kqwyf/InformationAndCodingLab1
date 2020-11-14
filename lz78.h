@@ -1,8 +1,16 @@
 #pragma once
+#include <vector>
+
+using namespace std;
 
 struct Lz78OutputUnit {
     int index; // 匹配词在字典中的下标
     char symbol; // 下一个不匹配字符
+
+    Lz78OutputUnit(int index, char symbol) {
+        this->index = index;
+        this->symbol = symbol;
+    }
 };
 
 /*
@@ -21,7 +29,7 @@ struct Lz78OutputUnit {
  *     当压缩输出长度超过输出缓冲区长度时，函数返回-1。
  *     当输入中包含除0和1外的其它符号时，函数返回-2。
  */
-int compressLz78(const char *src, int srcLen, Lz78OutputUnit *dst, int dstMaxLen, int dictSize);
+int compressLz78(const vector<char> &src, vector<Lz78OutputUnit> &dst, int dictSize);
 
 /*
  * 使用LZ78算法解压缩数据。
@@ -32,5 +40,5 @@ int compressLz78(const char *src, int srcLen, Lz78OutputUnit *dst, int dstMaxLen
  *     当解压输出长度超过输出缓冲区长度时，函数返回-1。
  *     当输入中包含除0和1外的其它符号时，函数返回-2。（未实现）
  */
-int decompressLz78(const Lz78OutputUnit *src, int srcLen, char *dst, int dstMaxLen, int dictSize);
+int decompressLz78(const vector<Lz78OutputUnit> &src, vector<char> &dst, int dictSize);
 
