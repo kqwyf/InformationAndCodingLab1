@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <pthread.h>
 #include <cstdio>
-
 #include "lz77.h"
 
 using std::vector;
@@ -15,13 +14,14 @@ using std::vector;
  *     返回成功匹配的长度。
  */
 int match(const vector<char> &src, int a, int b, int maxLen) {
-    for (int i = 0; i < maxLen; i++)
+    for (int i = 0; i < maxLen; i++) {
         if (src[a + i] != src[b + i])
             return i;
+    }
     return maxLen;
 }
 
-int _compressLz77(const vector<char> &src, int srcOffset, int srcLen, vector<Lz77OutputUnit> &dst, int searchBufLen, int lookAheadBufLen) {
+int _compressLz77(const vector<char> &src, int srcOffset, int srcLen, vector<Lz77OutputUnit> &dst, int searchBufLen, int lookAheadBufLen, int t_id=0) {
     // 检验输入合法性，既不为0也不为1时返回-2。见函数文档。
     for (int i = 0; i < srcLen; i++)
         if (src[srcOffset + i] != 0 && src[srcOffset + i] != 1)
@@ -40,7 +40,6 @@ int _compressLz77(const vector<char> &src, int srcOffset, int srcLen, vector<Lz7
     // 压缩阶段，search buffer已被输入填满
     int pos = std::min(searchBufLen, srcLen); // look ahead buffer最左符号在src中的下标，表示buffer的位置，随着循环更新。
     while (pos < srcLen) {
-        printf("%d ", pos);
         // 找出最长匹配
         int bestOffset = -1; // 已找到的最长匹配的偏移量
         int bestMatchLen = -1; // 已找到的最长匹配的长度
@@ -81,7 +80,7 @@ int compressLz77(const vector<char> &src, vector<Lz77OutputUnit> &dst, int searc
     return _compressLz77(src, 0, src.size(), dst, searchBufLen, lookAheadBufLen);
 }
 
-int decompressLz77(const vector<Lz77OutputUnit> &src, vector<char> &dst, int searchBufLen, int lookAheadBufLen) {
+int _decompressLz77(const vector<Lz77OutputUnit> &src, vector<char> &dst, int searchBufLen, int lookAheadBufLen, int t_id=0) {
     int pos = 0; // look ahead buffer最左符号在dst中的下标，表示buffer的位置，随着循环更新。
     for (int i = 0; i < src.size(); i++) {
         if (src[i].offset == 0 || src[i].length == 0) { // 没有匹配串，直接输出未匹配字符
@@ -106,12 +105,17 @@ int decompressLz77(const vector<Lz77OutputUnit> &src, vector<char> &dst, int sea
     return dst.size();
 }
 
+int decompressLz77(const vector<Lz77OutputUnit> &src, vector<char> &dst, int searchBufLen, int lookAheadBufLen) {
+    return _decompressLz77(src, dst, searchBufLen, lookAheadBufLen);
+}
+
 /*
  * 由于Pthread仅支持传递一个参数，因此将所有参数打包为一个结构体，
  * 并将compressLz77和decompressLz77打包成_parallel_compressLz77和_parallel_decompressLz77
  */
 
 struct CompressLz77Args {
+    int t_id;
     const vector<char> *src = NULL;
     int srcOffset;
     int srcLen;
@@ -121,9 +125,8 @@ struct CompressLz77Args {
 };
 
 struct DecompressLz77Args {
+    int t_id;
     const vector<Lz77OutputUnit> *src;
-    int srcOffset;
-    int srcLen;
     vector<char> *dst;
     int searchBufLen;
     int lookAheadBufLen;
@@ -131,28 +134,29 @@ struct DecompressLz77Args {
 
 void *_parallel_compressLz77(void *args) {
     CompressLz77Args *xargs = (CompressLz77Args*) args;
-    intptr_t len = _compressLz77(*(xargs->src), xargs->srcOffset, xargs->srcLen, *(xargs->dst), xargs->searchBufLen, xargs->lookAheadBufLen);
+    intptr_t len = _compressLz77(*(xargs->src), xargs->srcOffset, xargs->srcLen, *(xargs->dst), xargs->searchBufLen, xargs->lookAheadBufLen, xargs->t_id);
     return (void*)len;
 }
 
 int parallel_compressLz77(int num_t, const vector<char> &src, Lz77ParallelResult &dst, int searchBufLen, int lookAheadBufLen) {
     // 分发参数
     CompressLz77Args args[num_t];
-    vector<Lz77OutputUnit> tmp_blocks[num_t];
     int block_len = (src.size() + num_t - 1) / num_t;
 
     if (dst.lens.size())
         dst.lens.clear();
     if (dst.blocks.size())
         dst.blocks.clear();
+    for (int i = 0; i < num_t; i++)
+        dst.blocks.push_back(vector<Lz77OutputUnit>());
 
     for (int i = 0; i < num_t; ++i) {
-        dst.blocks.push_back(tmp_blocks[i]);
+        args[i].t_id = i;
         args[i].src = &src;
         args[i].srcOffset = block_len * i;
         args[i].srcLen = std::min(src.size() - (block_len * i),
                 (unsigned long)block_len); // 长度
-        args[i].dst = &dst.blocks.back();
+        args[i].dst = &dst.blocks[i];
         args[i].searchBufLen = searchBufLen;
         args[i].lookAheadBufLen = lookAheadBufLen;
     }
@@ -182,7 +186,7 @@ int parallel_compressLz77(int num_t, const vector<char> &src, Lz77ParallelResult
 
 void *_parallel_decompressLz77(void *args) {
     DecompressLz77Args *xargs = (DecompressLz77Args*) args;
-    intptr_t len = decompressLz77(*(xargs->src), *(xargs->dst), xargs->searchBufLen, xargs->lookAheadBufLen);
+    intptr_t len = _decompressLz77(*(xargs->src), *(xargs->dst), xargs->searchBufLen, xargs->lookAheadBufLen, xargs->t_id);
     return (void*)len;
 }
 
@@ -193,8 +197,8 @@ int parallel_decompressLz77(const Lz77ParallelResult &src, vector<char> &dst, in
     vector<char> dsts[num_t];
 
     for (int i = 0; i < num_t; ++i) {
+        args[i].t_id = i;
         args[i].src = &(src.blocks[i]);
-        args[i].srcLen = src.lens[i];
         args[i].dst = &dsts[i];
         args[i].searchBufLen = searchBufLen;
         args[i].lookAheadBufLen = lookAheadBufLen;
@@ -209,16 +213,14 @@ int parallel_decompressLz77(const Lz77ParallelResult &src, vector<char> &dst, in
     }
 
     // 回收结果
-    int len = 0;    // 统计每个子线程解压缩结果各自长度之和
-
     for (int i = 0; i < num_t; ++i) {
         void *retval;
         if (pthread_join(threads[i], &retval)) return -1;
         int _len = (intptr_t) retval;
         // 将结果写到dst中
         for (int j = 0; j < _len; ++j)
-            dst[len++] = (*(args[i].dst))[j];
+            dst.push_back((*(args[i].dst))[j]);
     }
 
-    return len;
+    return dst.size();
 }

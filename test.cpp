@@ -62,7 +62,7 @@ int rrand(int _max, int range) {
     return _max - tmp * tmp % range;
 }
 
-bool test_lz77(const vector<char> &src, int searchBufLen, int lookAheadBufLen, time_t &time_cost) {   // TODO: 改完lz77后将这个函数补全
+bool test_lz77(const vector<char> &src, int searchBufLen, int lookAheadBufLen, time_t &time_cost) {
     // 分配空间
     vector<Lz77OutputUnit> dst77;
     vector<char> out;
@@ -98,9 +98,7 @@ bool test_lz77_parallel(int num_t, const vector<char> &src, int searchBufLen, in
     vector<char> out;
 
     time_t start = clock();
-    printf("comp\n");
     int retval = parallel_compressLz77(num_t, src, dst77, searchBufLen, lookAheadBufLen);
-    printf("decomp\n");
     retval = parallel_decompressLz77(dst77, out, searchBufLen, lookAheadBufLen);
     time_cost += clock() - start;
 
