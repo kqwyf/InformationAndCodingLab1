@@ -64,33 +64,63 @@ int rrand(int _max, int range) {
 
 bool test_lz77(const vector<char> &src, int searchBufLen, int lookAheadBufLen, time_t &time_cost) {   // TODO: 改完lz77后将这个函数补全
     // 分配空间
-    // vector<xxx>;
+    vector<Lz77OutputUnit> dst77;
+    vector<char> out;
 
     time_t start = clock();
-    // int retval = compressLz77(src, );
-    // retval = decompressLz77();
+    int retval = compressLz77(src, dst77, searchBufLen, lookAheadBufLen);
+    retval = decompressLz77(dst77, out, searchBufLen, lookAheadBufLen);
     time_cost += clock() - start;
 
-    bool error = false;
-    // if (src.size() != retval) error = false;
-    // else {
-    //     for (int i = 0; i < retval; ++i) {
-    //         if (src[i] != out[i]) {
-    //             error = true;
-    //             break;
-    //         }
-    //     }
-    // }
+    bool flag = false;
+    if (src.size() != retval) flag = false;
+    else {
+        for (int i = 0; i < retval; ++i) {
+            if (src[i] != out[i]) {
+                flag = true;
+                break;
+            }
+        }
+    }
 
-    if (error) {
-        // Do something
+    if (flag) {
+        printf("Input Length: %zu\n", src.size());
+        printf("Output Length: %zu\n", out.size());
         return false;
     }
 
     return true;
 }
 
-bool test_lz77_parallel(const vector<char> &src, time_t &time_cost) {
+bool test_lz77_parallel(int num_t, const vector<char> &src, int searchBufLen, int lookAheadBufLen, time_t &time_cost) {
+    // 分配空间
+    Lz77ParallelResult dst77;
+    vector<char> out;
+
+    time_t start = clock();
+    printf("comp\n");
+    int retval = parallel_compressLz77(num_t, src, dst77, searchBufLen, lookAheadBufLen);
+    printf("decomp\n");
+    retval = parallel_decompressLz77(dst77, out, searchBufLen, lookAheadBufLen);
+    time_cost += clock() - start;
+
+    bool flag = false;
+    if (src.size() != retval) flag = false;
+    else {
+        for (int i = 0; i < retval; ++i) {
+            if (src[i] != out[i]) {
+                flag = true;
+                break;
+            }
+        }
+    }
+
+    if (flag) {
+        printf("Input Length: %zu\n", src.size());
+        printf("Output Length: %zu\n", out.size());
+        return false;
+    }
+
     return true;
 }
 
@@ -146,9 +176,12 @@ int main(int argc, char* argv[]) {
         // 随机生成输入配置
         int inputLen = rrand(MAX_INPUT_LENGTH, 10000);
         for (int i = 0; i < inputLen; i++) src.push_back(rand() % 2);   // TODO: 以byte为单位
+        int searchBufLen = rrand(MAX_SEARCH_LENGTH, MAX_SEARCH_LENGTH - 5);
+        int lookAheadBufLen = rrand(MAX_LOOKAHEAD_LENGTH, MAX_LOOKAHEAD_LENGTH - 5);
         int dictSize = rrand(MAX_DICT_SIZE, 100);
 
-        // test_lz77();
+        test_lz77(src, searchBufLen, lookAheadBufLen, time_lz77);
+        test_lz77_parallel(N_THREAD, src, searchBufLen, lookAheadBufLen, time_lz77_parall);
         test_lz78(src, dictSize, time_lz78);
     }
 
