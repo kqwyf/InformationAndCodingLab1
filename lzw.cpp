@@ -1,8 +1,11 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "lzw.h"
+
+using std::vector;
 
 /*
  * 字典树
@@ -17,13 +20,11 @@ struct Node {
     int child[N]; // 各子节点指针，去往第i个子节点的边上符号为i
 };
 
-int compressLzW(const char *src, int srcLen, LzWOutputUnit *dst, int dstMaxLen, int dictSize) {
+int compressLzW(const vector<char> &src, vector<LzWOutputUnit> &dst, int dictSize) {
     // 检验输入合法性，既不为0也不为1时返回-2。见函数文档。
-    for (int i = 0; i < srcLen; i++)
+    for (int i = 0; i < src.size(); i++)
         if (src[i] != 0 && src[i] != 1)
             return -2;
-
-    int len = 0;
 
     // 建立字典树
     Node<2> *tree = new Node<2>[dictSize]; // 目前仅实现2-ary输入上的压缩
@@ -38,23 +39,22 @@ int compressLzW(const char *src, int srcLen, LzWOutputUnit *dst, int dstMaxLen, 
 
     // 压缩阶段
     int pos = 0; // 当前下标
-    while (pos < srcLen) {
-        if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
-
+    while (pos < src.size()) {
         // 在字典树中匹配
         int node = root;
-        for (; pos < srcLen; pos++) {
+        for (; pos < src.size(); pos++) {
             char c = src[pos];
             if (tree[node].child[int(c)] == -1) break;
             node = tree[node].child[int(c)];
         }
         // 此时node指向应当输出的节点下标，或者说字典下标
-        dst[len].index = node; // 将字典中找到的最长串的index输出
-        len++;
+        LzWOutputUnit newUnit;
+        newUnit.index = node; // 将字典中找到的最长串的index输出
+        dst.push_back(newUnit);
 
         // 但之前不确定循环是由于输入结束而退出还是因为查到新词而退出
         // 如果是查到新词而退出，那么需要把新词加到字典里去
-        if (pos < srcLen) { // 因发现新词而退出
+        if (pos < src.size()) { // 因发现新词而退出
             char c = src[pos];
             // 向树中加入新节点
             if (treeSize < dictSize){
@@ -65,14 +65,12 @@ int compressLzW(const char *src, int srcLen, LzWOutputUnit *dst, int dstMaxLen, 
         }
         // 如果是输入结束了，就结束了。
     }
-    return len;
+    return dst.size();
 }
 
 
 
-int decompressLzW(const LzWOutputUnit *src, int srcLen, char *dst, int dstMaxLen, int dictSize) {
-    int len = 0; // 已输出的长度
-
+int decompressLzW(const vector<LzWOutputUnit> &src, vector<char> &dst, int dictSize) {
     // 建立字典树
     Node<2> *tree = new Node<2>[dictSize]; // 目前仅实现2-ary输入上的压缩
     memset(tree, -1, sizeof(Node<2>) * dictSize); // 全部指针初始化为-1，表示空指针
@@ -86,7 +84,7 @@ int decompressLzW(const LzWOutputUnit *src, int srcLen, char *dst, int dstMaxLen
 
     // 解压阶段
     int last_node = 0;
-    for (int i = 0; i < srcLen; i++) {
+    for (int i = 0; i < src.size(); i++) {
         // 首先将codeword逆序输出，因为已知字典下标时只能通过parent字段逆序遍历整个codeword
         int wordLen = 0; // 记录当前codeword的长度
         char first_char = 0; // 记录当前codeword的第一个字符
@@ -98,15 +96,14 @@ int decompressLzW(const LzWOutputUnit *src, int srcLen, char *dst, int dstMaxLen
             node = src[i].index;
         }
         for (; node != root; node = tree[node].parent) {
-            if (len >= dstMaxLen) return -1; // 检查输出缓冲区是否已满
-            dst[len++] = tree[node].symbol;
+            dst.push_back(tree[node].symbol);
             first_char = tree[node].symbol;
             wordLen++;
         }
         // 然后再将刚刚输出的codeword逆转过来
-        std::reverse(dst + len - wordLen, dst + len);
+        std::reverse(dst.end() - wordLen, dst.end());
         if (src[i].index >= treeSize){
-            dst[len++] = first_char;
+            dst.push_back(first_char);
         }
 
         if (last_node != 0) { // 不是第一个节点，前一个codeword加当前codeword的第一个字符，就是新字符串，插入字典树
@@ -120,5 +117,5 @@ int decompressLzW(const LzWOutputUnit *src, int srcLen, char *dst, int dstMaxLen
         last_node = src[i].index; // 将当前node设置为last_node
     }
     // 无未匹配字符时，输入也应当遍历结束了
-    return len;
+    return dst.size();
 }

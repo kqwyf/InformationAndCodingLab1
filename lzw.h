@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 struct LzWOutputUnit {
     int index; // 匹配词在字典中的下标
@@ -20,7 +21,7 @@ struct LzWOutputUnit {
  *     当压缩输出长度超过输出缓冲区长度时，函数返回-1。
  *     当输入中包含除0和1外的其它符号时，函数返回-2。
  */
-int compressLzW(const char *src, int srcLen, LzWOutputUnit *dst, int dstMaxLen, int dictSize);
+int compressLzW(const std::vector<char> &src, std::vector<LzWOutputUnit> &dst, int dictSize);
 
 /*
  * 使用LZW算法解压缩数据。
@@ -31,5 +32,5 @@ int compressLzW(const char *src, int srcLen, LzWOutputUnit *dst, int dstMaxLen, 
  *     当解压输出长度超过输出缓冲区长度时，函数返回-1。
  *     当输入中包含除0和1外的其它符号时，函数返回-2。（未实现）
  */
-int decompressLzW(const LzWOutputUnit *src, int srcLen, char *dst, int dstMaxLen, int dictSize);
+int decompressLzW(const std::vector<LzWOutputUnit> &src, std::vector<char> &dst, int dictSize);
 

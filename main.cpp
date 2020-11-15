@@ -7,13 +7,14 @@
 #include "lz77.h"
 #include "lz78.h"
 
-const char *usage = "Usage: main.exe -[7|8] -[C|D] -n <n_thread> --sb <searchBufLen> --lb <lookAheadBufLne> -i <input_file> -o <output_file>";
+const char *usage = "Usage: main.exe -[7|8] -[C|D] -n <n_thread> --sb <searchBufLen> --lb <lookAheadBufLen> --ds <dictSize> -i <input_file> -o <output_file>";
 
 int compress = 0; // 0->undefined,  1->compress, 2->decompress
 int method = 0;   // 0->undefined,  1->LZ77,     2->LZ78
 bool verbose = 0;
-int searchBufLen = 0;
-int lookAheadBufLen = 0;
+int searchBufLen = 2;
+int lookAheadBufLen = 2;
+int dictSize = 2;
 int n_thread = 1;
 
 char* input_file = NULL;
@@ -60,6 +61,7 @@ int parse_arg(int argc, char *argv[]) {
         }
         else if (!strcmp(arg, "--sb") && argv[i+1][0] != '-') searchBufLen = std::stoi(argv[++i]);
         else if (!strcmp(arg, "--lb") && argv[i+1][0] != '-') lookAheadBufLen = std::stoi(argv[++i]);
+        else if (!strcmp(arg, "--ds") && argv[i+1][0] != '-') dictSize = std::stoi(argv[++i]);
         else if (!strcmp(arg, "-n") && argv[i+1][0] != '-') n_thread = std::atoi(argv[++i]);
         else if (!strcmp(arg, "-i") && argv[i+1][0] != '-') input_file = argv[++i];
         else if (!strcmp(arg, "-o") && argv[i+1][0] != '-') output_file = argv[++i];
@@ -92,31 +94,58 @@ int parse_arg(int argc, char *argv[]) {
  * 读取文件字节数
  */
 int get_file_size(const char *filename) {
-    std::ifstream _fs(filename, std::ifstream::in | std::ifstream::binary);
-    std::streampos begin = _fs.tellg(), end;
-    _fs.seekg(0, std::ios::end);
-    end = _fs.tellg();
-    _fs.close();
+    std::ifstream inFile(filename, std::ifstream::in | std::ifstream::binary);
+    std::streampos begin = inFile.tellg(), end;
+    inFile.seekg(0, std::ios::end);
+    end = inFile.tellg();
+    inFile.close();
     return (int)(end - begin);
+}
+
+void fileToArray(const char *src, int srcLen, char *dst) {
+    for (int i = 0; i < srcLen; i++) {
+        for (int j = 0; j < 8; j++) {
+            dst[i * 8 + j] = (src[i] >> j) & 1;
+        }
+    }
+}
+
+void arrayToFile(const char *src, int srcLen, char *dst) {
+    for (int i = 0; i < srcLen / 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            if (i * 8 + j < srcLen) {
+                dst[i] |= src[i] << j;
+            }
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
     // 解析参数
     parse_arg(argc, argv);
 
-    std::ifstream _fs(input_file, std::ifstream::in | std::ifstream::binary);
-    std::streampos begin = _fs.tellg(), end;
-    _fs.seekg(0, std::ios::end);
-    end = _fs.tellg();
+    std::ifstream inFile(input_file, std::ifstream::in | std::ifstream::binary);
+    std::streampos begin = inFile.tellg(), end;
+    inFile.seekg(0, std::ios::end);
+    end = inFile.tellg();
     int size = end - begin;     // 获取文件大小
-    char *src = new char[size + 1];
-    _fs.close();
+    int srcLen = size * 8;
+    char *buffer = new char[size + 1];
+    char *src = new char[srcLen + 1];
+    inFile.seekg(0, std::ios::beg);
+    inFile.read(buffer, size);
+    fileToArray(buffer, size, src); // 将文件内容转换为仅由0和1构成的char数组
+    inFile.close();
 
     // 执行{compress, decompress} x {LZ77, LZ78}中的一种
     switch (compress * 10 + method) {
         case 11:
             printf("Compress + LZ77\n");
-            // compressLz77();
+            Lz77OutputUnit *dst = new Lz77OutputUnit[srcLen + 1];
+            int outLen = compressLz77(src, srcLen, dst, srcLen, searchBufLen, lookAheadBufLen);
+            std::ofstream outFile(output_file, std::ofstream::out | std::ofstream::binary);
+            outFile.write((char*)dst, sizeof(Lz77OutputUnit) * outLen);
+            outFile.close();
             break;
         case 12:
             printf("Compress + LZ78\n");

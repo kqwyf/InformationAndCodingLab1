@@ -6,6 +6,7 @@
 
 #include "lz77.h"
 #include "lz78.h"
+#include "lzw.h"
 
 using namespace std;
 
@@ -152,7 +153,33 @@ bool test_lz78(const vector<char> &src, int dictSize, time_t &time_cost) {
     return true;
 }
 
-bool test_lzw(const vector<char> &src, time_t &time_cost) {
+bool test_lzw(const vector<char> &src, int dictSize, time_t &time_cost) {
+    // 分配空间
+    vector<LzWOutputUnit> dstW;
+    vector<char> out;
+
+    time_t start = clock();
+    int retval = compressLzW(src, dstW, dictSize);
+    retval = decompressLzW(dstW, out, dictSize);
+    time_cost += clock() - start;
+
+    // 检查
+    bool flag = false;
+    if (src.size() != retval) flag = true;
+    else {
+        for (int i = 0; i < retval; i++) {
+            if (src[i] != out[i]) {
+                flag = true;
+                break;
+            }
+        }
+    }
+
+    if (flag) {
+        // Do something
+        return false;
+    }
+
     return true;
 }
 
@@ -181,6 +208,7 @@ int main(int argc, char* argv[]) {
         test_lz77(src, searchBufLen, lookAheadBufLen, time_lz77);
         test_lz77_parallel(N_THREAD, src, searchBufLen, lookAheadBufLen, time_lz77_parall);
         test_lz78(src, dictSize, time_lz78);
+        test_lzw(src, dictSize, time_lzw);
     }
 
     printf("LZ77:       %lld ms\n", time_lz77 * 1000 / CLOCKS_PER_SEC / NUM_TESTS);
