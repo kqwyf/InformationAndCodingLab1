@@ -2,7 +2,7 @@
 #include <cstring>
 #include <algorithm>
 #include <pthread.h>
-#include <cstdio>
+#include <cmath>
 #include "lz77.h"
 
 using std::vector;
@@ -22,11 +22,6 @@ int match(const vector<char> &src, int a, int b, int maxLen) {
 }
 
 int _compressLz77(const vector<char> &src, int srcOffset, int srcLen, vector<Lz77OutputUnit> &dst, int searchBufLen, int lookAheadBufLen, int t_id=0) {
-    // 检验输入合法性，既不为0也不为1时返回-2。见函数文档。
-    for (int i = 0; i < srcLen; i++)
-        if (src[srcOffset + i] != 0 && src[srcOffset + i] != 1)
-            return -2;
-
     // 初始阶段，search buffer未被输入填满。
     // 此时始终不匹配（匹配长度为0），先使用searchBufLen个三元组将search buffer内的符号全部输出
     for (int i = 0; i < std::min(searchBufLen, srcLen); i++) {
@@ -67,7 +62,7 @@ int _compressLz77(const vector<char> &src, int srcOffset, int srcLen, vector<Lz7
             newUnit.symbol = src[srcOffset + pos + bestMatchLen];
             pos += bestMatchLen + 1;
         } else {
-            newUnit.symbol = -1; // TODO: 这里并不合理，不应该使用symbol字段的特殊值来表示此处没有符号。应考虑使用offset和length字段的特殊值来表示。
+            newUnit.offset = -newUnit.offset; // 当symbol为空时，改变offset的符号来表示这种特殊情况，因为offset应总为非负的。
             pos += bestMatchLen;
         }
         dst.push_back(newUnit);
@@ -83,19 +78,19 @@ int compressLz77(const vector<char> &src, vector<Lz77OutputUnit> &dst, int searc
 int _decompressLz77(const vector<Lz77OutputUnit> &src, vector<char> &dst, int searchBufLen, int lookAheadBufLen, int t_id=0) {
     int pos = 0; // look ahead buffer最左符号在dst中的下标，表示buffer的位置，随着循环更新。
     for (int i = 0; i < src.size(); i++) {
-        if (src[i].offset == 0 || src[i].length == 0) { // 没有匹配串，直接输出未匹配字符
+        if (src[i].offset == 0) { // 没有匹配串，直接输出未匹配字符
             dst.push_back(src[i].symbol);
             pos++;
         } else { // 有匹配串
             // 先输出匹配串
-            int offset = src[i].offset;
+            int offset = std::abs(src[i].offset);
             for (int j = 0; j < src[i].length; j++) {
                 dst.push_back(dst[pos - offset + j]);
             }
             pos += src[i].length;
 
             // 然后检查匹配串之后是否有未匹配字符，有则输出
-            if (src[i].symbol != -1) { // TODO: 不应该使用symbol字段的特殊值表示没有符号。见压缩算法中的TODO。
+            if (src[i].offset >= 0) { // offset为负表示symbol为空
                 dst.push_back(src[i].symbol);
                 pos++;
             }

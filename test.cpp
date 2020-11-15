@@ -8,6 +8,8 @@
 #include "lz78.h"
 #include "lzw.h"
 
+#define N_SYMBOLS 256
+
 using namespace std;
 
 int NUM_TESTS = 10;
@@ -190,25 +192,36 @@ int main(int argc, char* argv[]) {
 
     // TODO: 压缩率测试
 
-    printf("max input len: %d\n", MAX_INPUT_LENGTH);
-
     srand(seed);
 
-    for (int test = 0; test < NUM_TESTS; ++test) {
+    for (int test = 1; test <= NUM_TESTS; ++test) {
         // 分配空间
         vector<char> src;
 
         // 随机生成输入配置
         int inputLen = rrand(MAX_INPUT_LENGTH, 10000);
-        for (int i = 0; i < inputLen; i++) src.push_back(rand() % 2);   // TODO: 以byte为单位
+        for (int i = 0; i < inputLen; i++) src.push_back(rand() % N_SYMBOLS);
         int searchBufLen = rrand(MAX_SEARCH_LENGTH, MAX_SEARCH_LENGTH - 5);
         int lookAheadBufLen = rrand(MAX_LOOKAHEAD_LENGTH, MAX_LOOKAHEAD_LENGTH - 5);
         int dictSize = rrand(MAX_DICT_SIZE, 100);
 
-        test_lz77(src, searchBufLen, lookAheadBufLen, time_lz77);
-        test_lz77_parallel(N_THREAD, src, searchBufLen, lookAheadBufLen, time_lz77_parall);
-        test_lz78(src, dictSize, time_lz78);
-        test_lzw(src, dictSize, time_lzw);
+        bool flag;
+
+        printf("Test %d for LZ77...", test);
+        flag = test_lz77(src, searchBufLen, lookAheadBufLen, time_lz77);
+        printf(flag ? " Passed.\n" : "Failed.\n");
+
+        printf("Test %d for LZ77_Parallel...", test);
+        flag = test_lz77_parallel(N_THREAD, src, searchBufLen, lookAheadBufLen, time_lz77_parall);
+        printf(flag ? " Passed.\n" : "Failed.\n");
+
+        printf("Test %d for LZ78...", test);
+        flag = test_lz78(src, dictSize, time_lz78);
+        printf(flag ? " Passed.\n" : "Failed.\n");
+
+        printf("Test %d for LZW...", test);
+        flag = test_lzw(src, dictSize, time_lzw);
+        printf(flag ? " Passed.\n" : "Failed.\n");
     }
 
     printf("LZ77:       %lld ms\n", time_lz77 * 1000 / CLOCKS_PER_SEC / NUM_TESTS);

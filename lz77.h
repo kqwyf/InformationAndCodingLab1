@@ -12,7 +12,7 @@ struct Lz77OutputUnit {
  * 算法假设search buffer与look ahead buffer长度均大于1。如果设置为1，有可能导致未知错误。
  *
  * Params:
- *     src : 输入数组，每个元素表示源数据中的1个符号（目前按照1个bit来实现，即符号集中只有0和1。是否可以优化成支持其它进制符号集？）。
+ *     src : 输入数组，每个元素表示源数据中的1个符号。
  *     dst : 压缩结果输出数组，每个元素表示一个三元组，详见LZ77算法原理。
  *     searchBufLen : LZ77算法参数，search buffer的长度。
  *     lookAheadBufLen : LZ77算法参数，look ahead buffer的长度。
@@ -20,7 +20,6 @@ struct Lz77OutputUnit {
  * Returns:
  *     正常情况下，函数返回输出长度（按输出元素个数计）。
  *     当压缩输出长度超过输出缓冲区长度时，函数返回-1。
- *     当输入中包含除0和1外的其它符号时，函数返回-2。
  */
 int compressLz77(const std::vector<char> &src, std::vector<Lz77OutputUnit> &dst, int searchBufLen, int lookAheadBufLen);
 
@@ -31,7 +30,6 @@ int compressLz77(const std::vector<char> &src, std::vector<Lz77OutputUnit> &dst,
  * Returns:
  *     正常情况下，函数返回输出长度（按输出元素个数计）。
  *     当解压输出长度超过输出缓冲区长度时，函数返回-1。
- *     当输入中包含除0和1外的其它符号时，函数返回-2。（未实现）
  */
 int decompressLz77(const std::vector<Lz77OutputUnit> &src, std::vector<char> &dst, int searchBufLen, int lookAheadBufLen);
 
