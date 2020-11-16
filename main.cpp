@@ -160,15 +160,15 @@ int main(int argc, char *argv[]) {
             printf("Compress + LZ77 parallel\n");
             Lz77ParallelResult dst;
             int outLen = parallel_compressLz77(n_thread, src, dst, searchBufLen, lookAheadBufLen);
-            char *outBuffer = new char[sizeof(int) + sizeof(int) * outLen + sizeof(Lz77OutputUnit) * outLen];
-            memcpy(outBuffer, &outLen, sizeof(outLen));
-            int len = sizeof(outLen);
-            for (auto u : dst.lens) {
+            char *outBuffer = new char[sizeof(int) + sizeof(int) * n_thread + sizeof(Lz77OutputUnit) * outLen];
+            memcpy(outBuffer, &n_thread, sizeof(n_thread));
+            int len = sizeof(n_thread);
+            for (int u : dst.lens) {
                 memcpy(outBuffer + len, &u, sizeof(u));
                 len += sizeof(u);
             }
             for (auto v : dst.blocks)
-                for (auto u : v)
+                for (Lz77OutputUnit u : v)
                     len += u.write(outBuffer + len);
             ofstream outFile(output_file, ofstream::out | ofstream::binary);
             outFile.write(outBuffer, len);
@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
             printf("Decompress + LZ77 parallel\n");
             Lz77ParallelResult src;
             int pos = 0;
-            int srcLen; // LZ77ParallenResult中lens的元素数
+            int srcLen = 0; // LZ77ParallenResult中lens的元素数
             memcpy(&srcLen, inBuffer, sizeof(srcLen));
             pos += sizeof(srcLen);
             for (int i = 0; i < srcLen; i++) {
@@ -230,10 +230,11 @@ int main(int argc, char *argv[]) {
                 pos += sizeof(tmp);
             }
             for (int i = 0; i < srcLen; i++) {
+                src.blocks.push_back(vector<Lz77OutputUnit>());
                 for (int j = 0; j < src.lens[i]; j++) {
                     Lz77OutputUnit tmp;
                     pos += tmp.read(inBuffer + pos);
-                    src.blocks[j].push_back(tmp);
+                    src.blocks[i].push_back(tmp);
                 }
             }
             vector<char> dst;
