@@ -1,10 +1,25 @@
 #pragma once
+#include <cstring>
 #include <vector>
 
+typedef short len_t;
+
 struct Lz77OutputUnit {
-    int offset; // 相对于buffer边界的偏移量
-    int length; // 匹配长度
+    len_t offset; // 相对于buffer边界的偏移量
+    len_t length; // 匹配长度
     char symbol; // 下一个不匹配字符
+    int write(char *buf) {
+        std::memcpy(buf, &offset, sizeof(offset));
+        std::memcpy(buf + sizeof(offset), &length, sizeof(length));
+        std::memcpy(buf + sizeof(offset) + sizeof(length), &symbol, sizeof(symbol));
+        return sizeof(offset) + sizeof(length) + sizeof(symbol);
+    }
+    int read(char *buf) {
+        std::memcpy(&offset, buf, sizeof(offset));
+        std::memcpy(&length, buf + sizeof(offset), sizeof(length));
+        std::memcpy(&symbol, buf + sizeof(offset) + sizeof(length), sizeof(symbol));
+        return sizeof(offset) + sizeof(length) + sizeof(symbol);
+    }
 };
 
 /*

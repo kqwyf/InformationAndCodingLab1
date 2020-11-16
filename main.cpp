@@ -3,14 +3,18 @@
 #include <fstream>
 #include <string>
 #include <unistd.h>
+#include <memory>
 
 #include "lz77.h"
 #include "lz78.h"
+#include "lzw.h"
 
-const char *usage = "Usage: main.exe -[7|8] -[C|D] -n <n_thread> --sb <searchBufLen> --lb <lookAheadBufLen> --ds <dictSize> -i <input_file> -o <output_file>";
+using namespace std;
+
+const char *usage = "Usage: main.exe -[7|8|p|w] -[C|D] -n <n_thread> --sb <searchBufLen> --lb <lookAheadBufLen> --ds <dictSize> -i <input_file> -o <output_file>";
 
 int compress = 0; // 0->undefined,  1->compress, 2->decompress
-int method = 0;   // 0->undefined,  1->LZ77,     2->LZ78
+int method = 0;   // 0->undefined,  1->LZ77,     2->LZ78,      3->LZ77 parallel, 4-> LZW
 bool verbose = 0;
 int searchBufLen = 2;
 int lookAheadBufLen = 2;
@@ -52,17 +56,25 @@ int parse_arg(int argc, char *argv[]) {
             compress = 2;
         }
         else if (!strcmp(arg, "-7")) {
-            if (method && method ^ 1) multi_def_err();
+            if (method != 0) multi_def_err();
             method = 1;
         }
         else if (!strcmp(arg, "-8")) {
-            if (method && method ^ 2) multi_def_err();
+            if (method != 0) multi_def_err();
             method = 2;
         }
-        else if (!strcmp(arg, "--sb") && argv[i+1][0] != '-') searchBufLen = std::stoi(argv[++i]);
-        else if (!strcmp(arg, "--lb") && argv[i+1][0] != '-') lookAheadBufLen = std::stoi(argv[++i]);
-        else if (!strcmp(arg, "--ds") && argv[i+1][0] != '-') dictSize = std::stoi(argv[++i]);
-        else if (!strcmp(arg, "-n") && argv[i+1][0] != '-') n_thread = std::atoi(argv[++i]);
+        else if (!strcmp(arg, "-p")) {
+            if (method != 0) multi_def_err();
+            method = 3;
+        }
+        else if (!strcmp(arg, "-w")) {
+            if (method != 0) multi_def_err();
+            method = 4;
+        }
+        else if (!strcmp(arg, "--sb") && argv[i+1][0] != '-') searchBufLen = stoi(argv[++i]);
+        else if (!strcmp(arg, "--lb") && argv[i+1][0] != '-') lookAheadBufLen = stoi(argv[++i]);
+        else if (!strcmp(arg, "--ds") && argv[i+1][0] != '-') dictSize = stoi(argv[++i]);
+        else if (!strcmp(arg, "-n") && argv[i+1][0] != '-') n_thread = atoi(argv[++i]);
         else if (!strcmp(arg, "-i") && argv[i+1][0] != '-') input_file = argv[++i];
         else if (!strcmp(arg, "-o") && argv[i+1][0] != '-') output_file = argv[++i];
         else if (!strcmp(arg, "-v")) verbose = true;
@@ -94,70 +106,159 @@ int parse_arg(int argc, char *argv[]) {
  * 读取文件字节数
  */
 int get_file_size(const char *filename) {
-    std::ifstream inFile(filename, std::ifstream::in | std::ifstream::binary);
-    std::streampos begin = inFile.tellg(), end;
-    inFile.seekg(0, std::ios::end);
+    ifstream inFile(filename, ifstream::in | ifstream::binary);
+    streampos begin = inFile.tellg(), end;
+    inFile.seekg(0, ios::end);
     end = inFile.tellg();
     inFile.close();
     return (int)(end - begin);
-}
-
-void fileToArray(const char *src, int srcLen, char *dst) {
-    for (int i = 0; i < srcLen; i++) {
-        for (int j = 0; j < 8; j++) {
-            dst[i * 8 + j] = (src[i] >> j) & 1;
-        }
-    }
-}
-
-void arrayToFile(const char *src, int srcLen, char *dst) {
-    for (int i = 0; i < srcLen / 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            if (i * 8 + j < srcLen) {
-                dst[i] |= src[i] << j;
-            }
-        }
-    }
 }
 
 int main(int argc, char *argv[]) {
     // 解析参数
     parse_arg(argc, argv);
 
-    std::ifstream inFile(input_file, std::ifstream::in | std::ifstream::binary);
-    std::streampos begin = inFile.tellg(), end;
-    inFile.seekg(0, std::ios::end);
+    ifstream inFile(input_file, ifstream::in | ifstream::binary);
+    streampos begin = inFile.tellg(), end;
+    inFile.seekg(0, ios::end);
     end = inFile.tellg();
-    int size = end - begin;     // 获取文件大小
-    int srcLen = size * 8;
-    char *buffer = new char[size + 1];
-    char *src = new char[srcLen + 1];
-    inFile.seekg(0, std::ios::beg);
-    inFile.read(buffer, size);
-    fileToArray(buffer, size, src); // 将文件内容转换为仅由0和1构成的char数组
+    int inSize = end - begin; // 获取文件大小
+    inFile.seekg(0, ios::beg);
+
+    char *inBuffer = new char[inSize];
+    inFile.read(inBuffer, inSize);
     inFile.close();
 
     // 执行{compress, decompress} x {LZ77, LZ78}中的一种
-    switch (compress * 10 + method) {
-        case 11:
-            printf("Compress + LZ77\n");
-            Lz77OutputUnit *dst = new Lz77OutputUnit[srcLen + 1];
-            int outLen = compressLz77(src, srcLen, dst, srcLen, searchBufLen, lookAheadBufLen);
-            std::ofstream outFile(output_file, std::ofstream::out | std::ofstream::binary);
-            outFile.write((char*)dst, sizeof(Lz77OutputUnit) * outLen);
-            outFile.close();
-            break;
-        case 12:
+    if (compress == 1) { // 压缩
+      vector<char> src(inBuffer, inBuffer + inSize);
+      if (method == 1) { // LZ77
+        printf("Compress + LZ77\n");
+        vector<Lz77OutputUnit> dst;
+        int outLen = compressLz77(src, dst, searchBufLen, lookAheadBufLen);
+        char *outBuffer = new char[sizeof(Lz77OutputUnit) * outLen];
+        int len = 0;
+        for (auto u : dst)
+          len += u.write(outBuffer + len);
+        ofstream outFile(output_file, ofstream::out | ofstream::binary);
+        outFile.write(outBuffer, len);
+        outFile.close();
+        delete[] outBuffer;
+        } else if (method == 2) { // LZ78
             printf("Compress + LZ78\n");
-            // decompressLz77();
-            break;
-        case 21:
+            vector<Lz78OutputUnit> dst;
+            int outLen = compressLz78(src, dst, dictSize);
+            char *outBuffer = new char[sizeof(Lz78OutputUnit) * outLen];
+            int len = 0;
+            for (auto u : dst)
+                len += u.write(outBuffer + len);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(outBuffer, len);
+            outFile.close();
+            delete[] outBuffer;
+        } else if (method == 3) { // LZ77 parallel
+            printf("Compress + LZ77 parallel\n");
+            Lz77ParallelResult dst;
+            int outLen = parallel_compressLz77(n_thread, src, dst, searchBufLen, lookAheadBufLen);
+            char *outBuffer = new char[sizeof(int) + sizeof(int) * outLen + sizeof(Lz77OutputUnit) * outLen];
+            memcpy(outBuffer, &outLen, sizeof(outLen));
+            int len = sizeof(outLen);
+            for (auto u : dst.lens) {
+                memcpy(outBuffer + len, &u, sizeof(u));
+                len += sizeof(u);
+            }
+            for (auto v : dst.blocks)
+                for (auto u : v)
+                    len += u.write(outBuffer + len);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(outBuffer, len);
+            outFile.close();
+            delete[] outBuffer;
+        } else if (method == 4) { // LZW
+            printf("Compress + LZW\n");
+            vector<LzWOutputUnit> dst;
+            int outLen = compressLzW(src, dst, dictSize);
+            char *outBuffer = new char[sizeof(LzWOutputUnit) * outLen];
+            int len = 0;
+            for (auto u : dst)
+                len += u.write(outBuffer + len);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(outBuffer, len);
+            outFile.close();
+            delete[] outBuffer;
+        }
+    } else if (compress == 2) { // 解压
+        if (method == 1) { // LZ77
             printf("Decompress + LZ77\n");
-            break;
-        case 22:
+            vector<Lz77OutputUnit> src;
+            int pos = 0;
+            while (pos < inSize) {
+                Lz77OutputUnit tmp;
+                pos += tmp.read(inBuffer + pos);
+                src.push_back(tmp);
+            }
+            vector<char> dst;
+            decompressLz77(src, dst, searchBufLen, lookAheadBufLen);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(dst.data(), dst.size());
+            outFile.close();
+        } else if (method == 2) { // LZ78
             printf("Decompress + LZ78\n");
-            break;
+            vector<Lz78OutputUnit> src;
+            int pos = 0;
+            while (pos < inSize) {
+                Lz78OutputUnit tmp(0, 0);
+                pos += tmp.read(inBuffer + pos);
+                src.push_back(tmp);
+            }
+            vector<char> dst;
+            decompressLz78(src, dst, dictSize);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(dst.data(), dst.size());
+            outFile.close();
+        } else if (method == 3) { // LZ77 parallel
+            printf("Decompress + LZ77 parallel\n");
+            Lz77ParallelResult src;
+            int pos = 0;
+            int srcLen; // LZ77ParallenResult中lens的元素数
+            memcpy(&srcLen, inBuffer, sizeof(srcLen));
+            pos += sizeof(srcLen);
+            for (int i = 0; i < srcLen; i++) {
+                int tmp;
+                memcpy(&tmp, inBuffer + pos, sizeof(tmp));
+                src.lens.push_back(tmp);
+                pos += sizeof(tmp);
+            }
+            for (int i = 0; i < srcLen; i++) {
+                for (int j = 0; j < src.lens[i]; j++) {
+                    Lz77OutputUnit tmp;
+                    pos += tmp.read(inBuffer + pos);
+                    src.blocks[j].push_back(tmp);
+                }
+            }
+            vector<char> dst;
+            parallel_decompressLz77(src, dst, searchBufLen, lookAheadBufLen);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(dst.data(), dst.size());
+            outFile.close();
+        } else if (method == 4) { // LZW
+            printf("Decompress + LZW\n");
+            vector<LzWOutputUnit> src;
+            int pos = 0;
+            while (pos < inSize) {
+                LzWOutputUnit tmp;
+                pos += tmp.read(inBuffer + pos);
+                src.push_back(tmp);
+            }
+            vector<char> dst;
+            decompressLzW(src, dst, dictSize);
+            ofstream outFile(output_file, ofstream::out | ofstream::binary);
+            outFile.write(dst.data(), dst.size());
+            outFile.close();
+        }
     }
+
+    delete[] inBuffer;
 
     return 0;
 }

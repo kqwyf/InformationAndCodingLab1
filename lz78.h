@@ -1,15 +1,30 @@
 #pragma once
+#include <cstring>
 #include <vector>
 
 using namespace std;
 
+typedef short len_t;
+
 struct Lz78OutputUnit {
-    int index; // 匹配词在字典中的下标
+    len_t index; // 匹配词在字典中的下标
     char symbol; // 下一个不匹配字符
 
     Lz78OutputUnit(int index, char symbol) {
         this->index = index;
         this->symbol = symbol;
+    }
+
+    int write(char *buf) {
+        std::memcpy(buf, &index, sizeof(index));
+        std::memcpy(buf + sizeof(index), &symbol, sizeof(symbol));
+        return sizeof(index) + sizeof(symbol);
+    }
+
+    int read(char *buf) {
+        std::memcpy(&index, buf, sizeof(index));
+        std::memcpy(&symbol, buf + sizeof(index), sizeof(symbol));
+        return sizeof(index) + sizeof(symbol);
     }
 };
 

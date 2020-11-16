@@ -1,8 +1,21 @@
 #pragma once
+#include <cstring>
 #include <vector>
 
+typedef short len_t;
+
 struct LzWOutputUnit {
-    int index; // 匹配词在字典中的下标
+    len_t index; // 匹配词在字典中的下标
+
+    int write(char *buf) {
+        std::memcpy(buf, &index, sizeof(index));
+        return sizeof(index);
+    }
+
+    int read(char *buf) {
+        std::memcpy(&index, buf, sizeof(index));
+        return sizeof(index);
+    }
 };
 
 /*

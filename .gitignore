@@ -1,5 +1,6 @@
 build
 bin
+data
 obj
 .vscode
 *.cbp
