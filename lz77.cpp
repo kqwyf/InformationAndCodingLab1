@@ -22,23 +22,12 @@ int match(const vector<char> &src, int a, int b, int maxLen) {
 }
 
 int _compressLz77(const vector<char> &src, int srcOffset, int srcLen, vector<Lz77OutputUnit> &dst, int searchBufLen, int lookAheadBufLen, int t_id=0) {
-    // 初始阶段，search buffer未被输入填满。
-    // 此时始终不匹配（匹配长度为0），先使用searchBufLen个三元组将search buffer内的符号全部输出
-    for (int i = 0; i < std::min(searchBufLen, srcLen); i++) {
-        Lz77OutputUnit newUnit;
-        newUnit.offset = 0; // 无用参数
-        newUnit.length = 0; // 未匹配任何符号
-        newUnit.symbol = src[srcOffset + i]; // 当前符号
-        dst.push_back(newUnit);
-    }
-
-    // 压缩阶段，search buffer已被输入填满
-    int pos = std::min(searchBufLen, srcLen); // look ahead buffer最左符号在src中的下标，表示buffer的位置，随着循环更新。
+    int pos = 0; // look ahead buffer最左符号在src中的下标，表示buffer的位置，随着循环更新。
     while (pos < srcLen) {
         // 找出最长匹配
         int bestOffset = -1; // 已找到的最长匹配的偏移量
-        int bestMatchLen = -1; // 已找到的最长匹配的长度
-        for (int i = searchBufLen; i >= 1; i--) { // 从左至右遍历search buffer，以每个字符为首字符尝试匹配。
+        int bestMatchLen = 0; // 已找到的最长匹配的长度
+        for (int i = std::min(pos, searchBufLen); i >= 1; i--) { // 从左至右遍历search buffer，以每个字符为首字符尝试匹配。
                                                   // 此处i相当于offset，因此是从searchBufLen减小到1。
             int matchLen = match(src, srcOffset + pos - i, srcOffset + pos,
                     std::min({           // 以下是match函数的第3个参数，用于决定最长匹配多长的符号串。
