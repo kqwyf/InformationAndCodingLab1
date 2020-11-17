@@ -139,7 +139,7 @@ int parallel_compressLz77(int num_t, const vector<char> &src, Lz77ParallelResult
         args[i].src = &src;
         args[i].srcOffset = block_len * i;
         args[i].srcLen = std::min(src.size() - (block_len * i),
-                (unsigned long)block_len); // 长度
+                (unsigned long long)block_len); // 长度
         args[i].dst = &dst.blocks[i];
         args[i].searchBufLen = searchBufLen;
         args[i].lookAheadBufLen = lookAheadBufLen;
